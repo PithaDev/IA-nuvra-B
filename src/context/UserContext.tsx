@@ -65,6 +65,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const { data: nuvraSource } = await supabase
+        .from('lead_sources')
+        .select('id')
+        .eq('name', 'Nuvra AI')
+        .maybeSingle();
+
+      const { data: newLeadStage } = await supabase
+        .from('lead_stages')
+        .select('id')
+        .eq('name', 'Novo Lead')
+        .maybeSingle();
+
       const { data, error } = await supabase
         .from('users')
         .insert({
@@ -73,11 +85,32 @@ export function UserProvider({ children }: { children: ReactNode }) {
           email: email || null,
           subscription_status: 'free',
           total_uses: 0,
+          lead_source: 'Nuvra AI',
         })
         .select()
         .single();
 
       if (error) throw error;
+
+      if (nuvraSource && newLeadStage) {
+        await supabase
+          .from('lead_qualifications')
+          .insert({
+            user_id: data.id,
+            source_id: nuvraSource.id,
+            stage_id: newLeadStage.id,
+            score: 30,
+          });
+
+        await supabase
+          .from('interactions')
+          .insert({
+            user_id: data.id,
+            interaction_type: 'ai_usage',
+            subject: 'Registro inicial na plataforma',
+            description: `Usuário ${name} se registrou na Nuvra AI através do formulário de cadastro.`,
+          });
+      }
 
       setUser(data);
       localStorage.setItem('nuvra_user_id', data.id);
@@ -110,6 +143,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
         });
 
       if (error) throw error;
+
+      await supabase
+        .from('interactions')
+        .insert({
+          user_id: user.id,
+          interaction_type: 'ai_usage',
+          subject: `Análise ${analysisType === 'marketing' ? 'de Marketing' : analysisType === 'code' ? 'de Código' : 'via Chat'}`,
+          description: inputText.substring(0, 200),
+        });
 
       const { data: updatedUser } = await supabase
         .from('users')
